@@ -1,3 +1,5 @@
+-- make it looks like node-mysql semantics
+
 local timer = require( "timer" ) -- luvit built-in
 local mysql = require( "luvit-mysql" )
 
