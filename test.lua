@@ -1,12 +1,13 @@
 -- make it looks like node-mysql semantics
 
 local timer = require( "timer" ) -- luvit built-in
-local mysql = require( "luvit-mysql" )
+local mysql = require( "./mysql" )
 
 local client = mysql.createClient( { db="",user="",port="",pass="" } )
 
-client:connect()
+--client:ping( function()    print("ping received")  end)
 
+--[[--
 client:query( "CREATE DATABASE testdb", function(err) 
     if err and err ~= mysql.ERROR_DB_CREATE_EXISTS then
       error("cannot create db" )
@@ -44,3 +45,5 @@ timer.setInterval( 2000, function()
       end)
 
   end)
+
+--]]--
