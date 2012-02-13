@@ -1,16 +1,10 @@
 local table = require("table")
 local string = require("string")
-
+local Buffer = require("buffer").Buffer
+local Util = require("./util")
 
 local POWS = { 1, 256, 65536, 16777216 }
 
-function bytedump(t)
-  local ttt ={}
-  for i=1,#t do
-    table.insert( ttt, string.byte( t, i ) )
-  end
-  print( table.concat( ttt, " " ) )
-end
 
 
 Parser={}
@@ -83,7 +77,7 @@ Parser.OK_FOR_PREPARED_STATEMENT_PACKET = 8
 Parser.PARAMETER_PACKET                 = 9
 Parser.USE_OLD_PASSWORD_PROTOCOL_PACKET = 10
 
-function Parser.new()
+function Parser:new()
   local parser = {
     state = Parser.STATE_PACKET_LENGTH,
     packet = nil,
@@ -119,7 +113,7 @@ function Parser.new()
   
   function parser:receive(data)
     print("parser.receive: len:", #data, data )
-    bytedump(data)
+    Util.dumpStringBytes(data)
 
     for i=1,#data do
       local c = string.byte(data,i)
@@ -184,8 +178,9 @@ function Parser.new()
         end
       elseif self.state == 5 then -- GREETING_SCRAMBLE_BUFF_1
         if self.packet.index == 0 then
-          self.packet.scrambleBuffer = {}
+          self.packet.scrambleBuffer = Buffer:new(8+12)
         end
+        print("set SCRAMBLE: at:", self.packet.index + 1 )        
         self.packet.scrambleBuffer[ self.packet.index+1 ] = c
         if self.packet.index == 7 then
           print("scramblebuflen:", #self.packet.scrambleBuffer )
@@ -225,7 +220,9 @@ function Parser.new()
           self:advance()
         end
       elseif self.state == 11 then -- GREETING_SCRAMBLE_BUFF_2
+        -- 12 bytes - not 13 bytes like the protocol spec says ...(node-mysql)
         if self.packet.index < 12 then
+          print("set SCRAMBLE: at:", self.packet.index + 8 + 1, c )
           self.packet.scrambleBuffer[ self.packet.index + 8 + 1 ] = c
         end
       elseif self.state == 12 then -- FIELD_COUNT

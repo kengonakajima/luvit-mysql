@@ -3,7 +3,8 @@
 local timer = require( "timer" ) -- luvit built-in
 local mysql = require( "./mysql" )
 
-local client = mysql.createClient( { db="",user="",port="",pass="" } )
+local client = mysql.createClient( { database="test",user="passtestuser",port=3306,password="hoge" } )
+--local client = mysql.createClient( { database="luvit_mysql_test_db",user="root",port=3306,password="" } )
 
 --client:ping( function()    print("ping received")  end)
 

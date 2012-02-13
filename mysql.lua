@@ -1,16 +1,134 @@
+local table = require("table")
+local math = require("math")
+local string = require("string")
 local net = require("net")
-local constants = require("./constants")
+local Constants = require("./constants")
 local Parser = require("./parser")
 local Auth = require("./auth")
-
+local Util = require("./util")
+local Buffer = require("buffer").Buffer
 local mysql = {}
 
 
 
 Query={}
-function Query.new()
+function Query:new()
   local query = {}
   return query
+end
+
+-----------------------
+
+OutgoingPacket={}
+function OutgoingPacket:new(sz, pktNumber )
+  local opkt = {}
+
+  function opkt:writeNumber(bytes,n)
+    assert(self.buffer and self.buffer.readUInt8) -- ensure luvit's Buffer
+    self:writeByte(n % 256)
+    if bytes == 1 then
+      return
+    end
+    if bytes == 2 or bytes > 4 then
+      error("writeNumber: 2 or >4 is not implemented" )
+    end
+    
+    if bytes >= 3 then
+      self:writeByte( math.floor( n / 256 ) % 256 )
+      self:writeByte( math.floor( n / 65536 ) % 256 )
+      if bytes == 3 then return end
+    end
+    self:writeByte( math.floor( n / 65536/256 ) % 256 )
+  end
+  
+  --
+  function opkt:writeFiller(bytes)
+    for i=1,bytes do
+      self:writeByte(0x0)
+    end    
+  end
+
+  --
+  function opkt:writeNullTerminated(bufOrString,encoding)
+    self:write(bufOrString, encoding )
+    self:writeByte(0x0)
+  end
+
+  --
+  function opkt:writeLengthCoded(bufOrStringOrNumber, encoding )
+    if not bufOrStringOrNumber then
+      self:writeByte(251)
+      return
+    end
+    if type(bufOrStringOrNumber) == "number" then
+      if bufOrStringOrNumber <= 250 then
+        self:writeByte(bufOrStringOrNumber)
+        return
+      end
+      if bufOrStringOrNumber < 0xffff then
+        self:writeByte(252)
+        self:writeByte(bufOrStringOrNumber % 256 )
+        self:writeByte( math.floor(bufOrStringOrNumber/256) % 256 )
+      elseif bufOrStringOrNumber < 0xffffff then
+        self:writeByte(253)
+        self:writeByte(bufOrStringOrNumber % 256 )
+        self:writeByte( math.floor(bufOrStringOrNumber/256) % 256 )
+        self:writeByte( math.floor(bufOrStringOrNumber/256/256) % 256 )
+      else
+        error("8 byte length coded numbers not supported yet")
+      end
+      return
+    end
+    if type(bufOrStringOrNumber)=="string" then
+      self:writeLengthCoded( #bufOrStringOrNumber )
+      self:write( bufOrStringOrNumber, encoding)
+      return
+    end
+    
+    if bufOrStringOrNumber.readUInt8 then -- luvit's buffer
+      self:writeLengthCoded( bufOrStringOrNumber.length )
+      self:write(bufOrStringOrNumber)
+      return
+    end
+
+    print("passed argument not a buffer, string or number",bufOrStringOrNumber)
+    error("arg error")    
+    
+  end
+  
+  --
+  function opkt:writeByte( b )  
+    self.buffer[ self.index + 1 ] = b -- +1, it's lua!
+    self.index = self.index + 1
+  end
+  
+  function opkt:write(bufOrString, encoding)
+    if type(bufOrString) == "string" then
+      if self.index + #bufOrString > self.buffer.length then
+        error("OutgoingPacket: input string too long" )
+      end
+      for i=1,#bufOrString do
+        self:writeByte( string.byte(bufOrString,i) )
+      end
+      return
+    end
+    if bufOrString.readUInt8 then -- luvit's buffer
+      for i=1,bufOrString.length do
+        self:writeByte( bufOrString[i] )
+      end
+      return
+    end
+
+    error("OutgoingPacket:write: argument must be a buffer or a string" )
+  end
+
+  -- initialize
+  opkt.buffer = Buffer:new( sz + 1 + 3 )
+  opkt.index = 0
+  opkt:writeNumber( 3, sz )
+  opkt:writeNumber( 1, pktNumber or 0 )
+
+  return opkt
 end
 
 ----------------------------
@@ -49,28 +167,36 @@ end
 function mysql.createClient(conf)
   local client = {}
 
+  -- defaults
   client.host = "127.0.0.1"
   client.port = 3306
   client.user = "root"
   client.password = nil
   client.database = ""
 
+  if conf.password then client.password = conf.password end
+  if conf.user then client.user = conf.user end
+  if conf.database then client.database = conf.database end
+  if conf.port then client.port = conf.port end
+  if conf.host then client.host = conf.host end
+  
+  
   local flags = {
-    constants.CLIENT_LONG_PASSWORD,
-    constants.CLIENT_FOUND_ROWS,
-    constants.CLIENT_LONG_FLAG,
-    constants.CLIENT_CONNECT_WITH_DB,
-    constants.CLIENT_ODBC,
-    constants.CLIENT_LOCAL_FILES,
-    constants.CLIENT_IGNORE_SPACE,
-    constants.CLIENT_PROTOCOL_41,
-    constants.CLIENT_INTERACTIVE,
-    constants.CLIENT_IGNORE_SIGPIPE,
-    constants.CLIENT_TRANSACTIONS,
-    constants.CLIENT_RESERVED,
-    constants.CLIENT_SECURE_CONNECTION,
-    constants.CLIENT_MULTI_STATEMENTS,
-    constants.CLIENT_MULTI_RESULTS
+    Constants.CLIENT_LONG_PASSWORD,
+    Constants.CLIENT_FOUND_ROWS,
+    Constants.CLIENT_LONG_FLAG,
+    Constants.CLIENT_CONNECT_WITH_DB,
+    Constants.CLIENT_ODBC,
+    Constants.CLIENT_LOCAL_FILES,
+    Constants.CLIENT_IGNORE_SPACE,
+    Constants.CLIENT_PROTOCOL_41,
+    Constants.CLIENT_INTERACTIVE,
+    Constants.CLIENT_IGNORE_SIGPIPE,
+    Constants.CLIENT_TRANSACTIONS,
+    Constants.CLIENT_RESERVED,
+    Constants.CLIENT_SECURE_CONNECTION,
+    Constants.CLIENT_MULTI_STATEMENTS,
+    Constants.CLIENT_MULTI_RESULTS
   }
   client.flags = 0
   for k,v in pairs(flags) do
@@ -82,7 +208,7 @@ function mysql.createClient(conf)
 --  this.flags = Client.defaultFlags;
   
   client.maxPacketSize = 0x01000000
-  client.charsetNumber = constants.UTF8_UNICODE_CI
+  client.charsetNumber = Constants.UTF8_UNICODE_CI
   client.debug = true
   client.ending = false
   client.connected = false
@@ -104,7 +230,7 @@ function mysql.createClient(conf)
   client.socket:on("data", function(data) client.parser:receive(data) end ) -- parser.write.bind(parser))
   client.socket:on("end", function() error("end")  end )
   
-  client.parser = Parser.new()
+  client.parser = Parser:new()
   client.parser:on("packet", function(packet)
       print("client: incoming packet. type:", packet.type )
 
@@ -112,10 +238,24 @@ function mysql.createClient(conf)
         print("greeting packet. sending auth..")
         client:sendAuth(packet)
       end
-      
-
     end )
 
+  function client:sendAuth(greetingPacket)
+    print("sendAuth. packet:", greetingPacket, "scrbuflen:", greetingPacket.scrambleBuffer.length )
+    local token = Auth.token( self.password, Util.byteArrayToString(greetingPacket.scrambleBuffer ) )
+    local packetSize = ( 4 + 4 + 1 + 23 ) + ( #self.user + 1 ) + ( #token + 1 ) + ( #self.database + 1 )
+    print("sendAuth: #token:", #token, "packetsize:", packetSize )
+    local packet = OutgoingPacket:new( packetSize, greetingPacket.number + 1 )
+    packet:writeNumber( 4, self.flags )
+    packet:writeNumber( 4, self.maxPacketSize )
+    packet:writeNumber( 1, self.charsetNumber )
+    packet:writeFiller(23)
+    packet:writeNullTerminated(self.user)
+    packet:writeLengthCoded(token)
+    packet:writeNullTerminated(self.database)
+    self:write(packet)
+    self.greetingPacket = greetingPacket
+  end
   
   function client:query(sql,cb)
     print("TODO: get query as a table and format it" )
@@ -123,7 +263,7 @@ function mysql.createClient(conf)
       error("not implemented")
     end
 
-    local q = Query.new(sql)
+    local q = Query:new(sql)
     if cb then
       self.fields={}
       self.rows={}
@@ -164,15 +304,19 @@ function mysql.createClient(conf)
         local pktlen = 1 + Buffer.byteLength( sql, 'utf-8')
         local packet = OutgoingPacket( pktlen )
         print("packet len:", pktlen, "packet:", packet )
-        packet.writeNumber( 1, constants.COM_QUERY )
+        packet.writeNumber( 1, Constants.COM_QUERY )
         packet.write(sql, 'utf-8' )
         self:write(packet)        
       end)
   end
   
   function client:write( packet )
-    print( "client: write: packet buffer len:", #packet.buffer )
-    local wlen = self.socket:write( packet.buffer )
+    
+    local s = Util.bufferToString(packet.buffer)    
+    print( "client: write: packet buffer len:", packet.buffer.length, #s, packet.buffer:inspect() )
+    local wlen = self.socket:write( s, function(err)
+        print("write error? ",err)
+      end)
     print( "wlen:", wlen)
   end
 
@@ -202,7 +346,7 @@ function mysql.createClient(conf)
   function client:ping(cb)
     self:enqueue( function()
         local packet = OutgoingPacket(1)
-        packet.writeNumber(1, constants.COM_PING )
+        packet.writeNumber(1, Constants.COM_PING )
         self:write(packet)
       end, cb )        
   end

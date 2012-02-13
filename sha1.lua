@@ -56,6 +56,11 @@
 ------------------------------------------------------------------------------------------
 ------------------------------------------------------------------------------------------
 
+local table = require("table")
+local string = require("string")
+local math = require("math")
+
+local SHA1 = {}
 
 --
 -- Return a W32 object for the number zero
@@ -270,7 +275,7 @@ local binary_to_hex = {
    ["1111"] = "f",
 }
 
-function asHEX(a)
+function SHA1.asHEX(a)
 
    local hex = ""
    local i = 1
@@ -286,11 +291,13 @@ function asHEX(a)
       hex = binary_to_hex[binary] .. hex
 
       i = i + 4
-   end
+
+    end
+
 
    return hex
-
 end
+asHEX = SHA1.asHEX
 
 local x67452301 = from_hex("67452301")
 local xEFCDAB89 = from_hex("EFCDAB89")
@@ -304,7 +311,7 @@ local x8F1BBCDC = from_hex("8F1BBCDC")
 local xCA62C1D6 = from_hex("CA62C1D6")
 
 
-function sha1(msg)
+function SHA1.sha1(msg)
 
    assert(type(msg) == 'string')
    assert(#msg < 0x7FFFFFFF) -- have no idea what would happen if it were large
@@ -419,6 +426,7 @@ function sha1(msg)
 
    return asHEX(H0) .. asHEX(H1) .. asHEX(H2) .. asHEX(H3) .. asHEX(H4)
 end
+local sha1 = SHA1.sha1
 
 local function hex_to_binary(hex)
    return hex:gsub('..', function(hexval)
@@ -426,9 +434,10 @@ local function hex_to_binary(hex)
                          end)
 end
 
-function sha1_binary(msg)
-   return hex_to_binary(sha1(msg))
+function SHA1.sha1_binary(msg)
+  return hex_to_binary(sha1(msg))
 end
+local sha1_binary = SHA1.sha1_binary
 
 local xor_with_0x5c = {
    [string.char(  0)] = string.char( 92),   [string.char(  1)] = string.char( 93),
@@ -695,7 +704,7 @@ local xor_with_0x36 = {
 
 local blocksize = 64 -- 512 bits
 
-function hmac_sha1(key, text)
+function SHA1.hmac_sha1(key, text)
    assert(type(key)  == 'string', "key passed to hmac_sha1 should be a string")
    assert(type(text) == 'string', "text passed to hmac_sha1 should be a string")
 
@@ -708,10 +717,12 @@ function hmac_sha1(key, text)
 
    return sha1(key_xord_with_0x5c .. sha1_binary(key_xord_with_0x36 .. text))
 end
+local hmac_sha1 = SHA1.hmac_sha1
 
-function hmac_sha1_binary(key, text)
+function SHA1.hmac_sha1_binary(key, text)
    return hex_to_binary(hmac_sha1(key, text))
 end
+local hmac_sha1_binary = SHA1.hmac_sha1_binary
 
 
 
@@ -1026,4 +1037,9 @@ print(198) assert("b7efbbc21ac1a746e22368e814ef5921056331ac" == hmac_sha1(string
 print(199) assert("950ad3222f4917f868d09feab237a909fb6d50b7" == hmac_sha1(string.char(78,46,85,132,231,4,243,255,22,45,240,155,151,119,94,213,50,111,10,83,40,204,49,52,17,69,132,44,213,83,54,251,211,159,123,55,17,58,162,170,210,3,35,237,165,181,217,27,7,249,158,22,158,207,77,121,37,63,37,39,204,68,99,158,78,175,73,183,47,99,134,65,74,234,154,33,14,117,126,98,167,242,106,112,145,82), string.char(144,133,184,16,9,8,227,98,190,60,141,255,87,69,63,214,12,67,14,206,32,120,59,232,176,82,32,194,115,52,148,143,126,86,82,101,167,249,17,169,9,105,228)), 199)
 
 ---]]-----------------------------------------------------------------------------------------
+
+
+return SHA1
+
+
 --END

@@ -1,4 +1,4 @@
-local constants = {
+local Constants = {
   -- Connections Flags
 
   CLIENT_LONG_PASSWORD     = 1,
@@ -668,4 +668,4 @@ local constants = {
 }
 
 
-return constants
+return Constants
