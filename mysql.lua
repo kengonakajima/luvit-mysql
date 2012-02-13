@@ -13,8 +13,27 @@ local mysql = {}
 
 Query={}
 function Query:new()
-  local query = {}
-  return query
+  local q = {}
+  q.callbacks = {}
+  function q:on( evname, f )
+    self.callbacks[evname] = f
+  end
+
+  function q:handlePacket(packet)
+    print( "query.handlePacket called" )
+    packet:on( "data", function(data,iarg)
+        print("packet.on data:", data )
+      end)
+  end
+  
+  
+  return q
+end
+
+Error={}
+function Error:new()
+  local e = {}
+  return e
 end
 
 -----------------------
@@ -227,18 +246,50 @@ function mysql.createClient(conf)
     end)
 
   client.socket:on("error", function() error("error") end ) --this._connectionErrorHandler())
-  client.socket:on("data", function(data) client.parser:receive(data) end ) -- parser.write.bind(parser))
+  client.socket:on("data", function(data)
+      client.parser:receive(data)
+    end ) -- parser.write.bind(parser))
   client.socket:on("end", function() error("end")  end )
+
   
   client.parser = Parser:new()
   client.parser:on("packet", function(packet)
-      print("client: incoming packet. type:", packet.type )
+      client:handlePacket(packet)
+    end)
+  function client:handlePacket(packet)
+    print("client.handlePacket called.  packet type:", packet.type )
 
-      if packet.type == Parser.GREETING_PACKET then
-        print("greeting packet. sending auth..")
-        client:sendAuth(packet)
+    if packet.type == Parser.GREETING_PACKET then -- 0
+      print("greeting packet. sending auth..")
+      self:sendAuth(packet)
+      return
+    end
+
+    local task = self.queue[1]
+    local delegate = nil
+    if task then delegate = task.delegate end
+
+    if type(delegate)=="table" and delegate.handlePacket then -- for Query
+      delegate:handlePacket(packet)
+      return
+    end    
+    
+    if packet.type ~= Parser.ERROR_PACKET then
+      self.connected = true
+      if delegate then
+        delegate(nil,self:packetToUserObject(packet))
       end
-    end )
+    else
+      local userpacket = self:packetToUserObject(packet)
+      if delegate then
+        delegate(userpacket)
+      else
+        self:emit("error", userpacket )
+      end
+    end
+
+    self:dequeue()
+  end 
 
   function client:sendAuth(greetingPacket)
     print("sendAuth. packet:", greetingPacket, "scrbuflen:", greetingPacket.scrambleBuffer.length )
@@ -259,7 +310,7 @@ function mysql.createClient(conf)
   
   function client:query(sql,cb)
     print("TODO: get query as a table and format it" )
-    if type(q)=="table" then
+    if type(sql)=="table" then
       error("not implemented")
     end
 
@@ -301,13 +352,14 @@ function mysql.createClient(conf)
     -- put a func to a que
     self:enqueue( function()
         print("queued function is called. sql:", sql )
-        local pktlen = 1 + Buffer.byteLength( sql, 'utf-8')
-        local packet = OutgoingPacket( pktlen )
+        local pktlen = 1 + #sql
+        local packet = OutgoingPacket:new( pktlen )
         print("packet len:", pktlen, "packet:", packet )
-        packet.writeNumber( 1, Constants.COM_QUERY )
-        packet.write(sql, 'utf-8' )
+        packet:writeNumber( 1, Constants.COM_QUERY )
+        packet:write(sql, 'utf-8' )
         self:write(packet)        
-      end)
+      end, q)
+    return q
   end
   
   function client:write( packet )
@@ -345,15 +397,51 @@ function mysql.createClient(conf)
 
   function client:ping(cb)
     self:enqueue( function()
-        local packet = OutgoingPacket(1)
-        packet.writeNumber(1, Constants.COM_PING )
+        print("pingsendfunc called")
+        local packet = OutgoingPacket:new(1)
+        packet:writeNumber(1, Constants.COM_PING )
         self:write(packet)
       end, cb )        
   end
 
   function client:enqueue(f,delegate)
     table.insert( self.queue, { fn=f, delegate=delegate } )
-  end  
+    print("enqueue:", #self.queue, "connected:", self.connected )
+    if #self.queue == 1 and self.connected then
+      f()
+    end
+  end
+  function client:dequeue()
+    table.remove( self.queue, 1 )
+    if #self.queue == 0 then
+      print("queue exhausted")
+      return
+    end
+
+    print("queue num:", #self.queue, " calling next queued function!" )
+    self.queue[1].fn()
+    
+  end
+
+  function client:packetToUserObject(packet)
+    local out = {}
+    if packet.type == Parser.ERROR_PACKET then
+      out = Error:new()
+    end
+    for k,v in pairs(packet) do
+      local newKey
+      if k == "errorMessage" then
+        newKey = "message"
+      elseif k == "errorNumber" then
+        newKey = "number"
+      else
+        newKey = k
+      end      
+      out[newKey] = v
+    end
+    return out
+  end
+  
   
   return client
 end

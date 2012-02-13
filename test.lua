@@ -6,7 +6,16 @@ local mysql = require( "./mysql" )
 local client = mysql.createClient( { database="test",user="passtestuser",port=3306,password="hoge" } )
 --local client = mysql.createClient( { database="luvit_mysql_test_db",user="root",port=3306,password="" } )
 
---client:ping( function()    print("ping received")  end)
+client:ping( function()    print("ping received")  end)
+
+local q = client:query( "select * from aho", function(err) error(err) end )
+q:on("row", function(row)
+    print("got a row:", row.name, row.age, row.created )
+  end)
+q:on("end", function()
+    print("query finished" )
+  end)
+
 
 --[[--
 client:query( "CREATE DATABASE testdb", function(err) 
