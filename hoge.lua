@@ -1,7 +1,3 @@
-pure Lua async MySQL client for luvit almost compatible as node-mysql
-===
-
-<pre>
 local MySQL = require( "./mysql" )
 
 local client = MySQL.createClient( { database="test",user="passtestuser",port=3306,password="hoge", logfunc=nil } )
@@ -29,4 +25,4 @@ client:query( "CREATE TABLE testtable (id INT(11) AUTO_INCREMENT, name VARCHAR(2
         end
       end)
   end)
-</pre>
+

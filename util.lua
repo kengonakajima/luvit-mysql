@@ -21,7 +21,6 @@ function Util.xor(a,b)
   for i=1,#a do
     out[i] = Bit.bxor( string.byte(a,i), string.byte(b,i) )
   end
-  print( "xor: out:", #out )
   return Util.byteArrayToString(out)
 end
 
