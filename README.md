@@ -11,10 +11,13 @@ client:query( "CREATE DATABASE luvit_mysql_testdb", function(err)
       error("cannot create db" )
     end
   end)
+
 client:query( "USE luvit_mysql_testdb" )
+
 client:query( "DROP TABLE IF EXISTS testtable", function(err,res,fields)
     assert(not err)
   end)
+
 client:query( "CREATE TABLE testtable (id INT(11) AUTO_INCREMENT, name VARCHAR(255), age INT(11), created DATETIME, PRIMARY KEY (id) )",
   function(err,res,fields)
     assert( not err )
@@ -30,3 +33,15 @@ client:query( "CREATE TABLE testtable (id INT(11) AUTO_INCREMENT, name VARCHAR(2
       end)
   end)
 </pre>
+
+
+HowTo
+====
+<pre>
+shell> luvit test.lua
+</pre>
+
+
+TODO
+====
+ - support luvit's module system
