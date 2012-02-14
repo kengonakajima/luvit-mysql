@@ -4,14 +4,15 @@ local timer = require( "timer" ) -- luvit built-in
 local MySQL = require( "./mysql" )
 
 local client = MySQL.createClient( { database="test",user="passtestuser",port=3306,password="hoge", logfunc=nil } )
---local client = MySQL.createClient( { database="luvit_mysql_test_db",user="root",port=3306,password="" } )
 
 client:ping( function()    print("ping received")  end)
 
 
 
 client:query( "CREATE DATABASE luvit_mysql_testdb", function(err)
-    print("query error. code:", err.message, err.number, MySQL.ERROR_DB_CREATE_EXISTS )
+    if err then
+      print("query error. code:", err.message, err.number, MySQL.ERROR_DB_CREATE_EXISTS )
+    end    
     if err and err.number ~= MySQL.ERROR_DB_CREATE_EXISTS then
       error("cannot create db" )
     end
