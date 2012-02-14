@@ -26,7 +26,7 @@ function Query:new(conf)
   
 
   function q:handlePacket(packet)
-    self.log( "query.handlePacket called. type:", packet.type, "####################" )
+    self.log( "query.handlePacket called. type:", packet.type )
 
     if packet.type == Constants.OK_PACKET then
       self:emit("end", Util.packetToUserObject(packet) )

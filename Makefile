@@ -32,5 +32,6 @@ $(LUVIT) :
 
 
 run:
+	mysql -u root -e "use test; grant all on *.* to passtestuser@localhost; flush privileges"
 	luvit test.lua 2>&1 | ruby -pe 'gsub(/\t\//,"/")'
 

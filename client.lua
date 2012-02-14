@@ -77,17 +77,46 @@ function Client:new(conf)
       client:log("mysql:connected")
     end)
 
-  client.socket:on("error", function() error("error") end ) --this._connectionErrorHandler())
+  function client:connectionErrorHandler()
+    return function(err)
+      local task = self.queue[1]
+      local delegate = nil
+      if task.delegate then delegate = task.delegate end
+
+      if type(delegate)=="table" and delegate.handlePacket then
+        delegate:emit("error",err)
+        return
+      end
+
+      if not delegate then
+        self:emit("error",err)
+      else
+        delegate(err)
+        table.remove( self.queue, 1 )
+      end
+    end
+  end
+
+  
+  client.socket:on("error", function(err)
+      local f = client:connectionErrorHandler()
+      f(err)
+    end ) 
   client.socket:on("data", function(data)
       client.parser:receive(data)
-    end ) -- parser.write.bind(parser))
-  client.socket:on("end", function() error("end")  end )
-
+    end ) 
+  client.socket:on("end", function()
+      local f = client:connectionErrorHandler()
+      f("socket closed")
+    end )
   
   client.parser = Parser:new({logfunc=client.logfunc})
   client.parser:on("packet", function(packet)
       client:handlePacket(packet)
     end)
+
+
+    
   function client:handlePacket(packet)
     self.log("client.handlePacket called.  packet type:", packet.type )
 
@@ -106,11 +135,11 @@ function Client:new(conf)
         end
         return
       end
-      local fn = self.connectionErrorHandler()
+      local fn = self:connectionErrorHandler()
       fn( Util.packetToUserObject(packet) )
       return
     end
-    
+
 
     ------
     
