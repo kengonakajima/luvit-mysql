@@ -45,14 +45,34 @@ client:query( "CREATE TABLE testtable (id INT(11) AUTO_INCREMENT, name VARCHAR(2
         assert( not err )
         print("INSERT DONE 3")
       end)
-    
+  end)
+
+client:query( "DROP TABLE IF EXISTS longstringtable", function(err,res,fields)
+    assert(not err)
+    function makestr(n)
+      local out=""
+      for i=1,n-1 do out = out .. "a" end
+      out = out .. "b"
+      return out
+    end
+    client:query( "CREATE TABLE longstringtable ( name mediumblob )", function(err)
+        if err then print(err.message) end
+        assert(not err)
+        client:query( "INSERT INTO longstringtable set name = '" .. makestr(50*1000) .. "'",
+          function(err)
+            if err then print(err.message) end
+            assert(not err)
+            print("long insert done")
+          end)
+      end)
   end)
 
 
+
 -- use timer because we're not sure about above INSERT finishes before following SELECT.
-timer.setInterval( 2000, function()
+timer.setInterval( 1000, function()
     print("timer interval!")
-    
+    if not cnt then cnt = 1 end
     local q = client:query( "SELECT * FROM testtable", function(err,res,fields)
         assert(not err)
         assert( fields.id )
@@ -90,6 +110,7 @@ timer.setInterval( 2000, function()
         assert( res[3].created.minute )
         assert( res[3].created.second )        
         
-        process.exit(0)
+        print("select done. cnt:",cnt)
+        cnt = cnt + 1
       end)
   end)

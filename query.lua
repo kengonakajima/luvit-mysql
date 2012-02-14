@@ -72,7 +72,6 @@ function Query:new(conf)
 
             
           if self.typeCast and buffer then
-            print( "FFFFFFFFFFF:", self.field.fieldType, self.typeCast, buffer  )
             if self.field.fieldType == Constants.FIELD_TYPE_TIMESTAMP or self.field.fieldType == Constants.FIELD_TYPE_DATE or self.field.fieldType == Constants.FIELD_TYPE_DATETIME or self.field.fieldType == Constants.FIELD_TYPE_NEWDATE then
               self.row[self.field.name] = Util.convertStringDateToTable( self.row[self.field.name] )
             elseif self.field.fieldType == Constants.FIELD_TYPE_TINY or self.field.fieldType == Constants.FIELD_TYPE_SHORT or self.field.fieldType == Constants.FIELD_TYPE_LONG or self.field.fieldType == Constants.FIELD_TYPE_LONGLONG or self.field.fieldType == Constants.FIELD_TYPE_INT24 or self.field.fieldType == Constants.FIELD_TYPE_YEAR then
