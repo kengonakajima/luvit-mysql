@@ -25,6 +25,7 @@ test: setup $(LUVIT)
 	$(LUVIT) test.lua
 
 setup:
+	mysql -u root -e "create database if not exists test"
 	mysql -u root -e "use test; grant all on *.* to passtestuser@localhost; flush privileges"
 	mysql -u root -e "set password for passtestuser@localhost = password('hoge')"
 
