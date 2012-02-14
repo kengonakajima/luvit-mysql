@@ -191,7 +191,7 @@ function Client:new(conf)
         end)
     else
       q:on("error",function(err)
-          error("error. TODO: call error callback?")
+          error(err.message)
           self:dequeue()
         end)
       q:on("end",function(result)
@@ -202,10 +202,8 @@ function Client:new(conf)
 
     -- put a func to a que
     self:enqueue( function()
-        print("$$$ queued function is called. sql:", sql )
         local pktlen = 1 + #sql
         local packet = OutgoingPacket:new( pktlen )
-        print("packet len:", pktlen, "packet:", packet )
         packet:writeNumber( 1, Constants.COM_QUERY )
         packet:write(sql, 'utf-8' )
         self:write(packet)        
@@ -257,20 +255,17 @@ function Client:new(conf)
 
   function client:enqueue(f,delegate)
     table.insert( self.queue, { fn=f, delegate=delegate } )
-    print("enqueue:", #self.queue, "connected:", self.connected )
+--    print("enqueue:", #self.queue, "connected:", self.connected )
     if #self.queue == 1 and self.connected then
       f()
     end
   end
   function client:dequeue()
-    print("dequeue called")
     table.remove( self.queue, 1 )
     if #self.queue == 0 then
-      print("queue exhausted")
       return
     end
-
-    print("queue num:", #self.queue, " calling next queued function!" )
+--    print("queue num:", #self.queue, " calling next queued function!" )
     self.queue[1].fn()
     
   end

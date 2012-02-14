@@ -74,9 +74,7 @@ end
 
 function Util.packetToUserObject(packet)
   local out = {}
-  if packet.type == Constants.ERROR_PACKET then
-    out = Error:new()
-  end
+
   for k,v in pairs(packet) do
     local newKey
     if k == "errorMessage" then
@@ -88,6 +86,8 @@ function Util.packetToUserObject(packet)
     end      
     out[newKey] = v
   end
+  -- always overwrite number
+  if packet.errorNumber then out.number = packet.errorNumber end
   return out
 end
 

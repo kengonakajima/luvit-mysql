@@ -6,17 +6,20 @@ local table = require("table")
 -- OK,RESULT_SET_HEADER, FIELD, EOF, ROW_DATA, ROW_DATA,EOF : 1,3,4,5,6,6,5,
 
 Query={}
-function Query:new()
-  local q = {}
+function Query:new(conf)
+  local q = {
+    sql = conf.sql,
+    typeCast = conf.typeCast
+  }
   q.callbacks = {}
   function q:on( evname, fn )
     self.callbacks[evname] = fn
   end
 
-  function q:emit( evname, ... )
+  function q:emit( evname, a,b )
     local cb = self.callbacks[evname]
-    print("Query:emitting event. name:",evname, "func:", cb )    
-    cb(...)
+    print("Query:emitting event. name:",evname, "func:", cb )
+    if cb then cb(a,b) end
   end
   
 
@@ -26,7 +29,8 @@ function Query:new()
     if packet.type == Constants.OK_PACKET then
       self:emit("end", Util.packetToUserObject(packet) )
     elseif packet.type == Constants.ERROR_PACKET then
-      error("error packet")
+      packet.sql = self.sql
+      self:emit( "error", Util.packetToUserObject(packet))
     elseif packet.type == Constants.FIELD_PACKET then
       if not self.fields then self.fields = {} end
       table.insert( self.fields, packet)
@@ -38,7 +42,7 @@ function Query:new()
         self.eofs = self.eofs + 1
       end
       if self.eofs == 2 then
-        self:emit( "end" )
+        self:emit( "end", nil, self.rows, self.fields )
       end
     elseif packet.type == Constants.ROW_DATA_PACKET then
       self.row = {}

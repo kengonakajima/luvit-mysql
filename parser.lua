@@ -155,7 +155,7 @@ function Parser:new()
       else
         print( "state:".. self.state.. " i:"..i.. " c:"..c )
       end
-      
+
       
       if self.state == 0 then -- Parser.STATE_PACKET_LENGTH 
         if not self.packet then
@@ -298,14 +298,36 @@ function Parser:new()
           self.packet.fieldCount = self:lengthCoded( c, self.packet.fieldCount, Parser.STATE_EXTRA_LENGTH )
           print("fieldCount:", self.packet.fieldCount )
         end
-      elseif self.state == 13 then 
-        error("Parser.STATE_ERROR_NUMBER                 = 13")
-      elseif self.state == 14 then
-        error("STATE_ERROR_SQL_STATE_MARKER       = 14")
-      elseif self.state == 15 then
-        error("Parser.STATE_ERROR_SQL_STATE              = 15")
-      elseif self.state == 16 then
-        error("Parser.STATE_ERROR_MESSAGE                = 16")
+      elseif self.state == 13 then -- Parser.STATE_ERROR_NUMBER
+        if self.packet.index == 0 then
+          self.packet.errorNumber = 0
+        end
+        -- 2 bytes LE
+        self.packet.errorNumber = self.packet.errorNumber + POWS[ self.packet.index + 1 ] * c
+        if self.packet.index == 1 then
+          if not self.greeted then
+            self:advance( Parser.STATE_ERROR_MESSAGE )
+          else
+            self:advance()
+          end
+        end        
+      elseif self.state == 14 then -- STATE_ERROR_SQL_STATE_MARKER
+        -- 1 byte
+        self.packet.sqlStateMarker = string.char(c)
+        self.packet.sqlState = ""
+        self:advance()
+      elseif self.state == 15 then -- Parser.STATE_ERROR_SQL_STATE
+        -- 5 chars
+        if self.packet.index < 5 then
+          self.packet.sqlState = self.packet.sqlState .. string.char(c)
+        end
+        if self.packet.index == 4 then
+          self:advance( Parser.STATE_ERROR_MESSAGE )
+        end
+      elseif self.state == 16 then -- Parser.STATE_ERROR_MESSAGE
+        if self.packet.received <= self.packet.length then
+          self.packet.errorMessage = ( self.packet.errorMessage or "" ) .. string.char(c)
+        end        
       elseif self.state == 17 then -- Parser.STATE_AFFECTED_ROWS               
         self.packet.affectedRows = self:lengthCoded( c, self.packet.affectedRows )
       elseif self.state == 18 then -- Parser.STATE_INSERT_ID

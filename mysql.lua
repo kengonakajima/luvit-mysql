@@ -1,4 +1,5 @@
 local Client = require("./client")
+local Constants = require("./constants")
 
 Error={}
 function Error:new()
@@ -13,6 +14,9 @@ function MySQL.createClient(conf)
   return cl
 end
 
+for k,v in pairs(Constants) do
+  MySQL[k]=v
+end
 
 return MySQL
 
