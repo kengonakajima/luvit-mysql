@@ -112,5 +112,9 @@ timer.setInterval( 1000, function()
         
         print("select done. cnt:",cnt)
         cnt = cnt + 1
+        if cnt > 10 then
+          print("test success!")
+          process.exit(0)
+        end
       end)
   end)
