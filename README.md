@@ -4,7 +4,6 @@ Luvit port of node-mysql
 
 Luvit port of [node-mysql](https://github.com/felixge/node-mysql) .
 
-
 Example
 ====
 
