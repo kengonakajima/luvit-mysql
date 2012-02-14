@@ -1,7 +1,11 @@
 Luvit port of node-mysql
 ===
+<a href="http://travis-ci.org/kengonakajima/luvit-mysql"><img src="https://secure.travis-ci.org/kengonakajima/luvit-mysql.png"></a>
 
 Luvit port of [node-mysql](https://github.com/felixge/node-mysql) .
+
+
+
 
 
 Example
