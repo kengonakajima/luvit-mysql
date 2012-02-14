@@ -21,8 +21,12 @@ endif
 
 all:  test
 
-test: $(LUVIT) 
+test: setup $(LUVIT) 
 	$(LUVIT) test.lua
+
+setup:
+	mysql -u root -e "use test; grant all on *.* to passtestuser@localhost; flush privileges"
+	mysql -u root -e "set password for passtestuser@localhost = password('hoge')"
 
 $(LUVIT) :
 	git submodule init
@@ -32,8 +36,5 @@ $(LUVIT) :
 
 
 run:
-	mysql -u root -e "use test; grant all on *.* to passtestuser@localhost; flush privileges"
-	mysql -u root -e "set password for passtestuser@localhost = password('hoge')"
-
 	luvit test.lua 2>&1 | ruby -pe 'gsub(/\t\//,"/")'
 
