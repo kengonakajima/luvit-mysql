@@ -167,7 +167,7 @@ function Client:new(conf)
     self.log("query:", sql )
     assert( type(sql)=="string", "not implemented")
 
-    local q = Query:new({sql=sql, logfunc=self.log})
+    local q = Query:new({sql=sql, logfunc=self.log, typeCast=self.typeCast})
     if cb then
       q.fields={}
       q.rows={}

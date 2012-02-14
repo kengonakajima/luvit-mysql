@@ -2,6 +2,7 @@ local Parser = require("./parser")
 local Util = require("./util")
 local Constants = require("./constants")
 local table = require("table")
+local math = require("math")
 
 -- OK,RESULT_SET_HEADER, FIELD, EOF, ROW_DATA, ROW_DATA,EOF : 1,3,4,5,6,6,5,
 
@@ -68,6 +69,20 @@ function Query:new(conf)
           end
 
           self.rowIndex = self.rowIndex + 1
+
+            
+          if self.typeCast and buffer then
+            print( "FFFFFFFFFFF:", self.field.fieldType, self.typeCast, buffer  )
+            if self.field.fieldType == Constants.FIELD_TYPE_TIMESTAMP or self.field.fieldType == Constants.FIELD_TYPE_DATE or self.field.fieldType == Constants.FIELD_TYPE_DATETIME or self.field.fieldType == Constants.FIELD_TYPE_NEWDATE then
+              self.row[self.field.name] = Util.convertStringDateToTable( self.row[self.field.name] )
+            elseif self.field.fieldType == Constants.FIELD_TYPE_TINY or self.field.fieldType == Constants.FIELD_TYPE_SHORT or self.field.fieldType == Constants.FIELD_TYPE_LONG or self.field.fieldType == Constants.FIELD_TYPE_LONGLONG or self.field.fieldType == Constants.FIELD_TYPE_INT24 or self.field.fieldType == Constants.FIELD_TYPE_YEAR then
+              self.row[self.field.name] = math.floor(tonumber( self.row[self.field.name], 10) )
+            elseif self.field.fieldType == Constants.FIELD_TYPE_FLOAT or self.field.fieldType == Constants.FIELD_TYPE_DOUBLE then
+              -- decimal types cannot be parsed as floats because
+              -- V8 Numbers have less precision than some MySQL Decimals (lua too)
+              self.row[self.field.name] = tonumber( self.row[self.field.name] )
+            end
+          end
 
           if self.rowIndex == (#self.fields+1) then
             self:emit( "row", self.row )

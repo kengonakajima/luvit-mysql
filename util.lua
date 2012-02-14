@@ -91,5 +91,9 @@ function Util.packetToUserObject(packet)
   return out
 end
 
+function Util.convertStringDateToTable(s)
+  local _,_,y,m,d,h,min,sec = string.find(s, "(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)")
+  return {  year = y, month = m, day = d, hour = h, minute = min, second = sec }
+end
   
 return Util
