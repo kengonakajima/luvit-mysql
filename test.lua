@@ -3,15 +3,13 @@
 local timer = require( "timer" ) -- luvit built-in
 local MySQL = require( "./mysql" )
 
-local client = MySQL.createClient( { database="test",user="passtestuser",port=3306,password="hoge", logfunc=print } )
+local client = MySQL.createClient( { database="test",user="passtestuser",port=3306,password="hoge", logfunc=nil } )
 --local client = MySQL.createClient( { database="luvit_mysql_test_db",user="root",port=3306,password="" } )
 
 client:ping( function()    print("ping received")  end)
 
 client:query( "select * from aho", function(err,res,fields)
-    if err then
-      error( err)
-    end
+    assert(not err)
     p(fields)
     p(res)
   end )
@@ -52,14 +50,9 @@ client:query( "CREATE TABLE testtable (id INT(11) AUTO_INCREMENT, name VARCHAR(2
 timer.setInterval( 2000, function()
     print("timer interval!")
     
-    local q = client:query( "SELECT * FROM testtable", function(err) assert(not err) end )
-
-    q:on("row", function(row)
-        print("got a row:", row.name, row.age, row.created )
+    local q = client:query( "SELECT * FROM testtable", function(err,res,fields)
+        assert(not err)
+        p(fields)
+        p(res)
       end)
-
-    q:on("end", function()
-        print("query finished" )
-      end)
-
   end)
