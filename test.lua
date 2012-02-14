@@ -1,25 +1,31 @@
 -- make it looks like node-mysql semantics
 
 local timer = require( "timer" ) -- luvit built-in
-local mysql = require( "./mysql" )
+local MySQL = require( "./mysql" )
 
-local client = mysql.createClient( { database="test",user="passtestuser",port=3306,password="hoge" } )
---local client = mysql.createClient( { database="luvit_mysql_test_db",user="root",port=3306,password="" } )
+local client = MySQL.createClient( { database="test",user="passtestuser",port=3306,password="hoge" } )
+--local client = MySQL.createClient( { database="luvit_mysql_test_db",user="root",port=3306,password="" } )
 
-client:ping( function()    print("ping received")  end)
+--client:ping( function()    print("ping received")  end)
 
-local q = client:query( "select * from aho", function(err) error(err) end )
-q:on("row", function(row)
-    print("got a row:", row.name, row.age, row.created )
-  end)
-q:on("end", function()
-    print("query finished" )
-  end)
+local q = client:query( "select * from aho", function(err,res,fields)
+    if err then
+      error( err)
+    end
+    print( "test.lua: got result: ", res, "num:", #res )
+    process.exit()
+  end )
+--q:on("row", function(row)
+--    print("got a row:", row.name, row.age, row.created )
+--  end)
+--q:on("end", function()
+--    print("query finished" )
+--  end)
 
 
 --[[--
 client:query( "CREATE DATABASE testdb", function(err) 
-    if err and err ~= mysql.ERROR_DB_CREATE_EXISTS then
+    if err and err ~= MySQL.ERROR_DB_CREATE_EXISTS then
       error("cannot create db" )
     end
   end)

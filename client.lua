@@ -89,12 +89,29 @@ function Client:new(conf)
   function client:handlePacket(packet)
     print("client.handlePacket called.  packet type:", packet.type )
 
-    if packet.type == Parser.GREETING_PACKET then -- 0
+    if packet.type == Constants.GREETING_PACKET then -- 0
       print("greeting packet. sending auth..")
       self:sendAuth(packet)
       return
     end
 
+    if not self.connected then
+      print("handlePacket: NOT CONNECTED YET. packet.type:", packet.type )
+      if packet.type ~= Constants.ERROR_PACKET then
+        self.connected = true
+        if #self.queue > 0 then
+          self.queue[1].fn()
+        end
+        return
+      end
+      local fn = self.connectionErrorHandler()
+      fn( Util.packetToUserObject(packet) )
+      return
+    end
+    
+
+    ------
+    
     local task = self.queue[1]
     local delegate = nil
     if task then delegate = task.delegate end
@@ -104,13 +121,13 @@ function Client:new(conf)
       return
     end    
     
-    if packet.type ~= Parser.ERROR_PACKET then
+    if packet.type ~= Constants.ERROR_PACKET then
       self.connected = true
       if delegate then
-        delegate(nil,self:packetToUserObject(packet))
+        delegate(nil, Util.packetToUserObject(packet))
       end
     else
-      local userpacket = self:packetToUserObject(packet)
+      local userpacket = Util.packetToUserObject(packet)
       if delegate then
         delegate(userpacket)
       else
@@ -146,25 +163,29 @@ function Client:new(conf)
 
     local q = Query:new(sql)
     if cb then
-      self.fields={}
-      self.rows={}
+      q.fields={}
+      q.rows={}
       q:on("error",function(err)
           cb(err)
           self:dequeue()
         end)
       q:on("field",function(field)
-          self.fields[field.name]=field
+          print("query got field! name:", field.name, field )
+          q.fields[field.name] = field
         end)
       q:on("row",function(row)
-          table.insert( self.rows, row)
+          print("query got row!")
+          for k,v in pairs(row) do
+            print("column:",k,v)
+          end          
+          table.insert( q.rows, row)
         end)
       q:on("end",function(result)
           if result then
             print("insert/delete/update: end has a result:",result)
             cb(nil,result)
           else
-            print("select: end hasnt a result")
-            cb(nil,self.rows,self.fields)
+            cb(nil, q.rows, q.fields)
           end
           self:dequeue()
         end)
@@ -181,7 +202,7 @@ function Client:new(conf)
 
     -- put a func to a que
     self:enqueue( function()
-        print("queued function is called. sql:", sql )
+        print("$$$ queued function is called. sql:", sql )
         local pktlen = 1 + #sql
         local packet = OutgoingPacket:new( pktlen )
         print("packet len:", pktlen, "packet:", packet )
@@ -195,7 +216,7 @@ function Client:new(conf)
   function client:write( packet )
     
     local s = Util.bufferToString(packet.buffer)    
-    print( "client: write: packet buffer len:", packet.buffer.length, #s, packet.buffer:inspect() )
+    print( "->", packet.buffer.length, #s, packet.buffer:inspect() )
     local wlen = self.socket:write( s, function(err)
         print("write error? ",err)
       end)
@@ -242,6 +263,7 @@ function Client:new(conf)
     end
   end
   function client:dequeue()
+    print("dequeue called")
     table.remove( self.queue, 1 )
     if #self.queue == 0 then
       print("queue exhausted")
@@ -251,25 +273,6 @@ function Client:new(conf)
     print("queue num:", #self.queue, " calling next queued function!" )
     self.queue[1].fn()
     
-  end
-
-  function client:packetToUserObject(packet)
-    local out = {}
-    if packet.type == Parser.ERROR_PACKET then
-      out = Error:new()
-    end
-    for k,v in pairs(packet) do
-      local newKey
-      if k == "errorMessage" then
-        newKey = "message"
-      elseif k == "errorNumber" then
-        newKey = "number"
-      else
-        newKey = k
-      end      
-      out[newKey] = v
-    end
-    return out
   end
   
   

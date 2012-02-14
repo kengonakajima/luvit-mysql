@@ -1,4 +1,5 @@
 local Constants = {
+ 
   -- Connections Flags
 
   CLIENT_LONG_PASSWORD     = 1,
@@ -50,7 +51,21 @@ local Constants = {
   COM_STMT_RESET          = 0x1a,
   COM_SET_OPTION          = 0x1b,
   COM_STMT_FETCH          = 0x1c,
-  
+
+  -- Packet types
+
+  GREETING_PACKET                  = 0,
+  OK_PACKET                        = 1,
+  ERROR_PACKET                     = 2,
+  RESULT_SET_HEADER_PACKET         = 3,
+  FIELD_PACKET                     = 4,
+  EOF_PACKET                       = 5,
+  ROW_DATA_PACKET                  = 6,
+  ROW_DATA_BINARY_PACKET           = 7,
+  OK_FOR_PREPARED_STATEMENT_PACKET = 8,
+  PARAMETER_PACKET                 = 9,
+  USE_OLD_PASSWORD_PROTOCOL_PACKET = 10,
+
   -- Collations / Charsets
 
   BIG5_CHINESE_CI      = 1,

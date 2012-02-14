@@ -2,6 +2,7 @@ local table = require("table")
 local string = require("string")
 local Buffer = require("buffer").Buffer
 local Util = require("./util")
+local Constants = require("./constants")
 
 local POWS = { 1, 256, 65536, 16777216 }
 
@@ -63,19 +64,6 @@ Parser.STATE_EOF_SERVER_STATUS            = 45
 Parser.STATE_COLUMN_VALUE_LENGTH          = 46
 Parser.STATE_COLUMN_VALUE_STRING          = 47
 
--- Packet types
-
-Parser.GREETING_PACKET                  = 0
-Parser.OK_PACKET                        = 1
-Parser.ERROR_PACKET                     = 2
-Parser.RESULT_SET_HEADER_PACKET         = 3
-Parser.FIELD_PACKET                     = 4
-Parser.EOF_PACKET                       = 5
-Parser.ROW_DATA_PACKET                  = 6
-Parser.ROW_DATA_BINARY_PACKET           = 7
-Parser.OK_FOR_PREPARED_STATEMENT_PACKET = 8
-Parser.PARAMETER_PACKET                 = 9
-Parser.USE_OLD_PASSWORD_PROTOCOL_PACKET = 10
 
 function Parser:new()
   local parser = {
@@ -123,22 +111,16 @@ function Parser:new()
 
   function parser:lengthCoded( c, val, nextState )
     if not self.lengthCodedLength then
-      print("self.lengthCodedLength is null")
       if c == Parser.LENGTH_CODED_16BIT_WORD then
-        print("A")
         self.lengthCodedLength = 2
       elseif c == Parser.LENGTH_CODED_24BIT_WORD then
-        print("B")        
         self.lengthCodedLength = 3
       elseif c == Parser.LENGTH_CODED_64BIT_WORD then
-        print("C")                
         self.lengthCodedLength = 8
       elseif c == Parser.LENGTH_CODED_NULL then
-        print("D")
         self:advance(nextState)
         return nil
       elseif c < Parser.LENGTH_CODED_NULL then
-        print("E")        
         self:advance(nextState)
         return c
       end
@@ -146,7 +128,6 @@ function Parser:new()
     end
 
     if c then
-      print("XXXXXXXXXX:", self.packet.index )
       val = val + POWS[ self.packet.index-1+1] * c
     end
     if self.packet.index == self.lengthCodedLength then
@@ -157,8 +138,7 @@ function Parser:new()
   end
   
   function parser:receive(data)
-    print("parser.receive: len:", #data, data )
-    Util.dumpStringBytes(data)
+    print("<- parser.receive: len:", #data )
 
     local i = 1
     while i <= #data do   --    for i=1,#data do          use while for modifying loop counter inside the loop..
@@ -171,7 +151,7 @@ function Parser:new()
       end
 
       if self.packet then
-        print( "state:".. self.state.. " i:" ..i.. " c:" ..c.. " recvd:".. self.packet.received.. " len:".. self.packet.length .. " index:" .. self.packet.index .. " lcl:" .. (self.lengthCodedLength or "nil") )
+        print( "state:".. self.state.. " i:" ..i.. " c:" ..c.. " recvd:".. self.packet.received.. " len:".. self.packet.length .. " index:" .. self.packet.index .. " lcl:" .. (self.lengthCodedLength or "nil") .. " lcsl:" .. (self.lengthCodedStringLength or "nil")  )
       else
         print( "state:".. self.state.. " i:"..i.. " c:"..c )
       end
@@ -180,18 +160,21 @@ function Parser:new()
       if self.state == 0 then -- Parser.STATE_PACKET_LENGTH 
         if not self.packet then
           print("new packet!")
-          self.packet = {}
-          self.packet.index = 0
-          self.packet.length = 0
-          self.packet.received = 0
-          self.packet.number = 0
-          self.packet.callbacks = {}
-          function self.packet:on( evname, cb )
-            self.callbacks[evname]=cb
+          local packet = {}
+          packet.index = 0
+          packet.length = 0
+          packet.received = 0
+          packet.number = 0
+          packet.callbacks = {}
+          function packet:on( evname, cb )
+            self.callbacks[evname] = cb
           end          
-          function self.packet:emit( evname, data, iarg )
-            print("packet.emit: #data:", #data, "iarg:", iarg, data  )            
-          end          
+          function packet:emit( evname, data, iarg )
+            print("packet.emit: #data:", #data, "iarg:", iarg, data  )
+            local cb = self.callbacks[evname]
+            cb(data,iarg)
+          end
+          self.packet = packet
         end        
 
         self.packet.length = self.packet.length + POWS[self.packet.index+1] * c
@@ -211,12 +194,12 @@ function Parser:new()
         end
       elseif self.state == 2 then -- Parser.STATE_GREETING_PROTOCOL_VERSION
         if c == 0xff then
-          print("error packet")
-          self.packet.type = Parser.ERROR_PACKET
+          print("packet type set: error packet --------------")
+          self.packet.type = Constants.ERROR_PACKET
           self:advance( Parser.STATE_ERROR_NUMBER )
         else
-          print("greeting packet")
-          self.packet.type = Parser.GREETING_PACKET
+          print("packet type set: greeting packet ---------------")
+          self.packet.type = Constants.GREETING_PACKET
           self.packet.protocolVersion = c
           self:advance()
         end
@@ -227,7 +210,6 @@ function Parser:new()
         if c ~= 0 then
           self.packet.serverVersion = self.packet.serverVersion .. string.char(c)
         else
-          print("svVer:", self.packet.serverVersion )
           self:advance()
         end
       elseif self.state == 4 then
@@ -258,7 +240,6 @@ function Parser:new()
         -- 2 bytes, LE
         self.packet.serverCapabilities = self.packet.serverCapabilities + POWS[ self.packet.index+1]*c
         if self.packet.index == 1 then
-          print("capa:", self.packet.serverCapabilities )
           self:advance()
         end
       elseif self.state == 8 then -- GREETING_SERVER_LANGUAGE
@@ -271,7 +252,6 @@ function Parser:new()
         -- 2 bytes LE
         self.packet.serverStatus = self.packet.serverStatus + POWS[ self.packet.index+1 ] * c
         if self.packet.index == 1 then
-          print( "status:", self.packet.serverStatus)
           self:advance()
         end
       elseif self.state == 10 then -- GREETING_FILLER_2
@@ -283,7 +263,6 @@ function Parser:new()
       elseif self.state == 11 then -- GREETING_SCRAMBLE_BUFF_2
         -- 12 bytes - not 13 bytes like the protocol spec says ...(node-mysql)
         if self.packet.index < 12 then
-          print("set SCRAMBLE: at:", self.packet.index + 8 + 1, c )
           self.packet.scrambleBuffer[ self.packet.index + 8 + 1 ] = c
         end
       elseif self.state == 12 then -- FIELD_COUNT
@@ -292,30 +271,30 @@ function Parser:new()
         local toBreak = false
         if self.packet.index == 0 then
           if c == 0xff then
-            print("error packet 2")
-            self.packet.type = Parser.ERROR_PACKET
+            print("packet type set: error packet 2 ---------------")
+            self.packet.type = Constants.ERROR_PACKET
             self:advance(Parser.STATE_ERROR_NUMBER)
             toBreak = true
           elseif c == 0xfe and not self.authenticated then
-            print("use_old_password_protocol_packet")
-            self.packet.type = Parser.USE_OLD_PASSWORD_PROTOCOL_PACKET
+            print("packet type set: use_old_password_protocol_packet --------------")
+            self.packet.type = Constants.USE_OLD_PASSWORD_PROTOCOL_PACKET
             toBreak = true
           else
             if c == 0x0 then
               -- after the first OK PACKET, we are authenticated
               self.authenticated = true
-              print("ok packet")
-              self.packet.type = Parser.OK_PACKET
+              print("packet type set: ok packet ---------------------")
+              self.packet.type = Constants.OK_PACKET
               self:advance( Parser.STATE_AFFECTED_ROWS)
               toBreak = true
             end
           end
         end
-        print(" toBreak:",toBreak)
+
         if not toBreak then
           self.receivingFieldPackets = true
-          print("result_set_header_packet")
-          self.packet.type = Parser.RESULT_SET_HEADER_PACKET
+          print("packet type set: result_set_header_packet ------------------")
+          self.packet.type = Constants.RESULT_SET_HEADER_PACKET
           self.packet.fieldCount = self:lengthCoded( c, self.packet.fieldCount, Parser.STATE_EXTRA_LENGTH )
           print("fieldCount:", self.packet.fieldCount )
         end
@@ -329,7 +308,6 @@ function Parser:new()
         error("Parser.STATE_ERROR_MESSAGE                = 16")
       elseif self.state == 17 then -- Parser.STATE_AFFECTED_ROWS               
         self.packet.affectedRows = self:lengthCoded( c, self.packet.affectedRows )
-        print( "STATE_AFFECTED_ROWS: c:",c, "affected_rows:", self.packet.affectedRows )
       elseif self.state == 18 then -- Parser.STATE_INSERT_ID
         self.packet.insertId = self:lengthCoded( c, self.packet.insertId )
       elseif self.state == 19 then -- Parser.STATE_SERVER_STATUS
@@ -358,19 +336,19 @@ function Parser:new()
       elseif self.state == 22 then -- Parser.STATE_EXTRA_LENGTH
         self.packet.extra = ""
         self.lengthCodedStringLength = self:lengthCoded( c, self.lengthCodedStringLength )
-        print("lengthCodedStringLength:", self.lengthCodedStringLength )
       elseif self.state == 23 then  --  Parser.STATE_EXTRA_STRING
         self.packet.extra = self.packet.extra .. string.char(c)
       elseif self.state == 24 then -- Parser.STATE_FIELD_CATALOG_LENGTH
         local toBreak = false
         if self.packet.index == 0 then
           if c == 0xfe then
-            print("eof packet")
-            self.packet.type = Parser.EOF_PACKET
+            print("packet type set: eof packet -------------------")
+            self.packet.type = Constants.EOF_PACKET
             self:advance( Parser.STATE_EOF_WARNING_COUNT )
             toBreak = true
           else
-            self.packet.type = Parser.FIELD_PACKET
+            print("packet type set: field packet -------------------")
+            self.packet.type = Constants.FIELD_PACKET
           end
           if not toBreak then
             self.lengthCodedStringLength = self:lengthCoded( c, self.lengthCodedStringLength )
@@ -517,13 +495,14 @@ function Parser:new()
       elseif self.state == 46 then -- Parser.STATE_COLUMN_VALUE_LENGTH
         if self.packet.index == 0 then
           self.packet.columnLength = 0
-          self.packet.type = Parser.ROW_DATA_PACKET
+          print("packet type set: row_data_packet ----------------")
+          self.packet.type = Constants.ROW_DATA_PACKET
         end
         local toBreak = false
         if self.packet.received == 1 then
           if c == 0xfe then
-            print("eof packet")
-            self.packet.type = Parser.EOF_PACKET
+            print("packet type set: eof packet ---------------")
+            self.packet.type = Constants.EOF_PACKET
             self.receivingRowPackets = false
             self:advance( Parser.STATE_EOF_WARNING_COUNT )
             toBreak = true
@@ -532,11 +511,12 @@ function Parser:new()
           end
         end
         if not toBreak then
-          print("self.packet.columnLength A:", self.packet.columnLength, self.packet.index )
           self.packet.columnLength = self:lengthCoded( c, self.packet.columnLength )
-          print("self.packet.columnLength B:", self.packet.columnLength  )          
-          if self.packet.columnLength == 0 and self.lengthCodedStringLength == 0 then
-            print("EMITTING DATAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 1")
+          print("PPPPPPPPPPPPPPPPP:", self.packet.columnLength, self.lengthCodedStringLength )
+          if ( self.packet.columnLength == nil or self.packet.columnLength == 0 ) and ( self.lengthCodedStringLength == nil or self.lengthCodedStringLength == 0 ) then
+            local cbarg = nil
+            if self.packet.columnLength then cbarg = Buffer:new(0) end
+            packet:emit( "data", cbarg, 0 )
             if self.packet.received < self.packet.length then
               self:advance( Parser.STATE_COLUMN_VALUE_LENGTH )
             else
@@ -552,14 +532,12 @@ function Parser:new()
         local toRead
         if ( i-1 + remaining ) > #data then
           toRead = #data - (i-1)
-          print("AAAAAAAAAAAA. i:",i, "#data:",#data, "toRead:",toRead )
           self.packet.index = self.packet.index + toRead
           self.packet:emit("data", string.sub( data, i, #data), remaining - toRead )
           -- the -1 offsets are because these values are also manipulated by the loop itself
           self.packet.received = self.packet.received + ( toRead - 1 );
           i = #data -- fin directry
         else
-          print("BBBBBBBBBBBB. i:",i, "#data:",#data )
           self.packet:emit("data", string.sub( data, i, i + remaining - 1 ), 0 )
           
           i = i + remaining  -- all

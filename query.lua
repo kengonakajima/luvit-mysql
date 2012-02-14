@@ -1,4 +1,7 @@
 local Parser = require("./parser")
+local Util = require("./util")
+local Constants = require("./constants")
+local table = require("table")
 
 -- OK,RESULT_SET_HEADER, FIELD, EOF, ROW_DATA, ROW_DATA,EOF : 1,3,4,5,6,6,5,
 
@@ -6,33 +9,70 @@ Query={}
 function Query:new()
   local q = {}
   q.callbacks = {}
-  function q:on( evname, f )
-    self.callbacks[evname] = f
+  function q:on( evname, fn )
+    self.callbacks[evname] = fn
   end
 
-  function q:handlePacket(packet)
-    print( "query.handlePacket called. type:", packet.type, "####################"  )
-    packet:on( "data", function(data,iarg)
-        print("packet.on data:", data )
-      end)
-
-    if packet.type == Parser.OK_PACKET then
-      error("ok packet")
-    elseif packet.type == Parser.ERROR_PACKET then
-      error("error packet")
-    elseif packet.type == Parser.FIELD_PACKET then
-      error("field packet")      
-    elseif packet.type == Parser.EOF_PACKET then
-      error("eof packet")            
-    elseif packet.type == Parser.ROW_DATA_PACKET then
-      error("row data packet")                  
-    else
-      error("query: invalid packet type")
-    end
-    
-      
+  function q:emit( evname, ... )
+    local cb = self.callbacks[evname]
+    print("Query:emitting event. name:",evname, "func:", cb )    
+    cb(...)
   end
   
+
+  function q:handlePacket(packet)
+    print( "query.handlePacket called. type:", packet.type, "####################" )
+
+    if packet.type == Constants.OK_PACKET then
+      self:emit("end", Util.packetToUserObject(packet) )
+    elseif packet.type == Constants.ERROR_PACKET then
+      error("error packet")
+    elseif packet.type == Constants.FIELD_PACKET then
+      if not self.fields then self.fields = {} end
+      table.insert( self.fields, packet)
+      self:emit( "field", packet )
+    elseif packet.type == Constants.EOF_PACKET then
+      if not self.eofs then
+        self.eofs = 1
+      else
+        self.eofs = self.eofs + 1
+      end
+      if self.eofs == 2 then
+        self:emit( "end" )
+      end
+    elseif packet.type == Constants.ROW_DATA_PACKET then
+      self.row = {}
+      self.rowIndex = 1 -- it's lua!
+      self.field = nil
+      packet:on("data", function(buffer,remaining)
+          print("query row_data_packet receives data. buffer:", buffer, "remaining:", remaining, "nfields:", #self.fields, "ri:", self.rowIndex, "f:", self.field  )
+          
+          if not self.field then
+            self.field = self.fields[ self.rowIndex ]
+            self.row[ self.field.name ] = ""
+          end
+
+          if buffer then
+            self.row[ self.field.name ] = self.row[ self.field.name ] .. buffer
+          else
+            self.row[ self.field.name ] = nil
+          end
+
+          if remaining and remaining > 0 then
+            return
+          end
+
+          self.rowIndex = self.rowIndex + 1
+
+          if self.rowIndex == (#self.fields+1) then
+            self:emit( "row", self.row )
+            return
+          end
+          
+          self.field = nil
+        end)
+    end
+  end
   
   return q
 end
