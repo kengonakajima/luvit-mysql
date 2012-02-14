@@ -22,13 +22,17 @@ function Client:new(conf)
   client.user = "root"
   client.password = nil
   client.database = ""
+  client.logging = false
 
   if conf.password then client.password = conf.password end
   if conf.user then client.user = conf.user end
   if conf.database then client.database = conf.database end
   if conf.port then client.port = conf.port end
   if conf.host then client.host = conf.host end
-  
+  if conf.logfunc then client.logfunc = conf.logfunc else client.logfunc = function()end end
+
+  client.log = client.logfunc
+
   
   local flags = {
     Constants.CLIENT_LONG_PASSWORD,
@@ -51,10 +55,8 @@ function Client:new(conf)
   for k,v in pairs(flags) do
     client.flags = client.flags + v
   end
-  print("default flag:", client.flags )
   
---  this.typeCast = true;
---  this.flags = Client.defaultFlags;
+  client.typeCast = true
   
   client.maxPacketSize = 0x01000000
   client.charsetNumber = Constants.UTF8_UNICODE_CI
@@ -72,7 +74,7 @@ function Client:new(conf)
         p(err)
         return
       end
-      print("connected..")
+      client:log("mysql:connected")
     end)
 
   client.socket:on("error", function() error("error") end ) --this._connectionErrorHandler())
@@ -82,21 +84,21 @@ function Client:new(conf)
   client.socket:on("end", function() error("end")  end )
 
   
-  client.parser = Parser:new()
+  client.parser = Parser:new({logfunc=client.logfunc})
   client.parser:on("packet", function(packet)
       client:handlePacket(packet)
     end)
   function client:handlePacket(packet)
-    print("client.handlePacket called.  packet type:", packet.type )
+    self.log("client.handlePacket called.  packet type:", packet.type )
 
     if packet.type == Constants.GREETING_PACKET then -- 0
-      print("greeting packet. sending auth..")
+      self.log("client:handlePacket: greeting packet. sending auth..")
       self:sendAuth(packet)
       return
     end
 
     if not self.connected then
-      print("handlePacket: NOT CONNECTED YET. packet.type:", packet.type )
+      self.log("client:handlePacket: NOT CONNECTED YET. packet.type:", packet.type )
       if packet.type ~= Constants.ERROR_PACKET then
         self.connected = true
         if #self.queue > 0 then
@@ -139,10 +141,8 @@ function Client:new(conf)
   end 
 
   function client:sendAuth(greetingPacket)
-    print("sendAuth. packet:", greetingPacket, "scrbuflen:", greetingPacket.scrambleBuffer.length )
     local token = Auth.token( self.password, Util.byteArrayToString(greetingPacket.scrambleBuffer ) )
     local packetSize = ( 4 + 4 + 1 + 23 ) + ( #self.user + 1 ) + ( #token + 1 ) + ( #self.database + 1 )
-    print("sendAuth: #token:", #token, "packetsize:", packetSize )
     local packet = OutgoingPacket:new( packetSize, greetingPacket.number + 1 )
     packet:writeNumber( 4, self.flags )
     packet:writeNumber( 4, self.maxPacketSize )
@@ -154,14 +154,20 @@ function Client:new(conf)
     self:write(packet)
     self.greetingPacket = greetingPacket
   end
+
+  function client:enqueue(f,delegate)
+    table.insert( self.queue, { fn=f, delegate=delegate } )
+    if #self.queue == 1 and self.connected then
+      f()
+    end
+  end
+
   
   function client:query(sql,cb)
-    print("TODO: get query as a table and format it" )
-    if type(sql)=="table" then
-      error("not implemented")
-    end
+    self.log("query:", sql )
+    assert( type(sql)=="string", "not implemented")
 
-    local q = Query:new(sql)
+    local q = Query:new({sql=sql, logfunc=self.log})
     if cb then
       q.fields={}
       q.rows={}
@@ -170,19 +176,13 @@ function Client:new(conf)
           self:dequeue()
         end)
       q:on("field",function(field)
-          print("query got field! name:", field.name, field )
           q.fields[field.name] = field
         end)
       q:on("row",function(row)
-          print("query got row!")
-          for k,v in pairs(row) do
-            print("column:",k,v)
-          end          
           table.insert( q.rows, row)
         end)
       q:on("end",function(result)
           if result then
-            print("insert/delete/update: end has a result:",result)
             cb(nil,result)
           else
             cb(nil, q.rows, q.fields)
@@ -195,7 +195,6 @@ function Client:new(conf)
           self:dequeue()
         end)
       q:on("end",function(result)
-          print("query ended")
           self:dequeue()
         end)
     end
@@ -214,11 +213,10 @@ function Client:new(conf)
   function client:write( packet )
     
     local s = Util.bufferToString(packet.buffer)    
-    print( "->", packet.buffer.length, #s, packet.buffer:inspect() )
+    self.log( "->", packet.buffer.length, #s, packet.buffer:inspect() )
     local wlen = self.socket:write( s, function(err)
-        print("write error? ",err)
+        assert(not err)
       end)
-    print( "wlen:", wlen)
   end
 
   function client:escape(val)
@@ -246,31 +244,19 @@ function Client:new(conf)
 
   function client:ping(cb)
     self:enqueue( function()
-        print("pingsendfunc called")
         local packet = OutgoingPacket:new(1)
         packet:writeNumber(1, Constants.COM_PING )
         self:write(packet)
       end, cb )        
   end
 
-  function client:enqueue(f,delegate)
-    table.insert( self.queue, { fn=f, delegate=delegate } )
---    print("enqueue:", #self.queue, "connected:", self.connected )
-    if #self.queue == 1 and self.connected then
-      f()
-    end
-  end
   function client:dequeue()
     table.remove( self.queue, 1 )
     if #self.queue == 0 then
       return
     end
---    print("queue num:", #self.queue, " calling next queued function!" )
     self.queue[1].fn()
-    
   end
-  
-  
   return client
 end
 

@@ -9,7 +9,8 @@ Query={}
 function Query:new(conf)
   local q = {
     sql = conf.sql,
-    typeCast = conf.typeCast
+    typeCast = conf.typeCast,
+    log = conf.logfunc
   }
   q.callbacks = {}
   function q:on( evname, fn )
@@ -18,13 +19,13 @@ function Query:new(conf)
 
   function q:emit( evname, a,b )
     local cb = self.callbacks[evname]
-    print("Query:emitting event. name:",evname, "func:", cb )
+    self.log("Query:emitting event. name:",evname, "func:", cb )
     if cb then cb(a,b) end
   end
   
 
   function q:handlePacket(packet)
-    print( "query.handlePacket called. type:", packet.type, "####################" )
+    self.log( "query.handlePacket called. type:", packet.type, "####################" )
 
     if packet.type == Constants.OK_PACKET then
       self:emit("end", Util.packetToUserObject(packet) )
@@ -49,7 +50,7 @@ function Query:new(conf)
       self.rowIndex = 1 -- it's lua!
       self.field = nil
       packet:on("data", function(buffer,remaining)
-          print("query row_data_packet receives data. buffer:", buffer, "remaining:", remaining, "nfields:", #self.fields, "ri:", self.rowIndex, "f:", self.field  )
+          self.log("query row_data_packet receives data. buffer:", buffer, "remaining:", remaining, "nfields:", #self.fields, "ri:", self.rowIndex, "f:", self.field  )
           
           if not self.field then
             self.field = self.fields[ self.rowIndex ]
