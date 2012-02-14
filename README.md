@@ -1,4 +1,4 @@
-pure Lua async MySQL client for luvit almost compatible as node-mysql
+Luvit port of node-mysql
 ===
 
 Luvit port of [node-mysql](https://github.com/felixge/node-mysql) .
