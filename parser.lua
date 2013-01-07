@@ -272,7 +272,7 @@ function Parser:new(conf)
         end
       elseif self.state == 10 then -- GREETING_FILLER_2
         -- 13 bytes 0x0
-        assert( c == 0x0 )
+        assert( c == 0x0 ) -- Note: This causes error on Percona MySQL (Percona-Server-5.5.28-rel29.2). Simply comment this line out to avoid aborting. see issue#2.
         if self.packet.index == 12 then
           self:advance()
         end
